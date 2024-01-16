@@ -9,7 +9,6 @@ object Main {
             .replace("b", if (b) "TRUE" else "FALSE")
         val left = leftmostParenthesis(expr)
         val right = correspondingRight(expr, left)
-
         println("expr: $expr")
         println("mutableExpr: $mutableExpr")
 
