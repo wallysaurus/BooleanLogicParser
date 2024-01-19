@@ -32,16 +32,11 @@ object Main {
     private fun operate(basicExpression: String, a: Boolean, b: Boolean): String {
         with(basicExpression) {
             return if (when {
-                this.contains("∧"),
-                this.contains("AND") -> { a && b }
-                this.contains("∨"),
-                this.contains("OR") -> { a || b }
-                this.contains("⊕"),
-                this.contains("XOR") -> { a != b } // if a does not equal b, one value has to be true and one has to be false.
-                this.contains("="),
-                this.contains("EQUALS") -> { a == b }
-                this.contains("->"),
-                this.contains("IMPLIES") -> { !a || b }
+                this.contains("∧") || this.contains("AND") -> { a && b }
+                this.contains("∨") || this.contains("OR") -> { a || b }
+                this.contains("⊕") || this.contains("XOR") -> { a != b } // if a does not equal b, one value has to be true and one has to be false.
+                this.contains("=") || this.contains("EQUALS") -> { a == b }
+                this.contains("->") || this.contains("IMPLIES") -> { !a || b }
                 else -> { false }
             }) "T" else "F"
         }
