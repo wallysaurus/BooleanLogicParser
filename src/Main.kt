@@ -1,23 +1,21 @@
 object Main {
 
     fun case(a: Boolean, b: Boolean, expr: String): String {
-        val raw = expr.replace(Regex("/[()]/"), "")
-        if (raw in listOf("TRUE", "FALSE")) return raw
+        val raw = expr.replace("(", "").replace(")", "")
+        if (raw in listOf("T", "F")) return raw
 
         val left = leftmostParenthesis(expr)
         val right = correspondingRight(expr, left)
+        println("left: $left, right: $right, expr: $expr")
 
         // grab the contents within the innermost parenthesis, excluding the parenthesis.
         val section = expr.subSequence((left ?: -1) + 1..<(right ?: expr.length)).toString()
         // use the operate() function to determine the result of the operation, and plug the value back into the equation.
-        try {
-            val result = expr.replaceRange((left ?: -1), (right ?: expr.length), operate(section, a, b))
-            return case(a, b, result)
-        } catch (error: Error) {
-            println(expr)
-        }
-        // recurse over the expression until it has been reduced to a singular value. (i.e. "T" or "(T)")
-        return case(a, b, "poo")
+        val result = expr.replaceRange((left ?: -1), (right ?: expr.length) + 1, operate(section, a, b))
+
+        // TODO(handle expressions with 3 or more parts + order of operations.)
+
+        return case(a, b, result)
     }
 
     private fun leftmostParenthesis(expr: String): Int? {
@@ -34,11 +32,16 @@ object Main {
     private fun operate(basicExpression: String, a: Boolean, b: Boolean): String {
         with(basicExpression) {
             return if (when {
-                this.contains("∧") -> { a && b }
-                this.contains("∨") -> { a || b }
-                this.contains("⊕") -> { a != b } // if a does not equal b, one value has to be true and one has to be false.
-                this.contains("=") -> { a == b }
-                this.contains("->") -> { !a || b }
+                this.contains("∧"),
+                this.contains("AND") -> { a && b }
+                this.contains("∨"),
+                this.contains("OR") -> { a || b }
+                this.contains("⊕"),
+                this.contains("XOR") -> { a != b } // if a does not equal b, one value has to be true and one has to be false.
+                this.contains("="),
+                this.contains("EQUALS") -> { a == b }
+                this.contains("->"),
+                this.contains("IMPLIES") -> { !a || b }
                 else -> { false }
             }) "T" else "F"
         }
@@ -46,5 +49,5 @@ object Main {
 }
 
 fun main() {
-    println(Main.case(a = true, b = false, expr = "(a+b+(a*b))"))
+    println(Main.case(a = true, b = false, expr = "(aORbIMPLIESb)"))
 }
