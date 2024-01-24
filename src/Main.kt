@@ -72,8 +72,24 @@ object Parser {
         if (counter != 0) throw ParseException("Parenthesis Abuse.")
     }
 
+
+    /*
+    Steps to build a tree:
+        1. Identify the lowest scope. In the following test case: ["(P OR (Q AND R)) AND ((S AND T) OR (U OR V))"],
+           our lowest scope can be defined as ["a AND b"], where a and b are parenthesis bodies that should be
+           recursed back into the function.
+        2. Create the first node of your tree by identifying the first least-prioritized-operator in the scope.
+           For our test case, this would be the AND operator. An example tree demonstrating the order of operations:
+                                                               AND
+                                                       /                 \
+                                                     OR                   OR
+                                                    /  \              /        \
+                                                   P   AND          AND        AND
+                                                      /   \        /   \      /   \
+                                                     Q     R      S     T    U     V
+        3.
+     */
     fun <T> buildTree(expr: String, variables: Map<String, Boolean>) : Node<T> {
-        val children : MutableList<String> = mutableListOf()
 
         // Grabs the index range within the first found parenthesis body.
         fun grabSection(expr: String) : IntRange {
@@ -111,6 +127,7 @@ object Parser {
         else if (section == 1..<expr.length) {
             return orderOfOp(expr.substring(section))
         } else {
+            val children : MutableList<String> = mutableListOf()
             var mutable = expr
             do {
                 var s = grabSection(mutable)
