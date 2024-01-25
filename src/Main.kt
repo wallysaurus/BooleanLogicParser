@@ -1,6 +1,6 @@
-sealed class Node<T>(val value: T) {
-    var left: Node<T>? = null
-    var right: Node<T>? = null
+abstract class Node<T> (val value: T) {
+    var left: Node<*>? = null
+    var right: Node<*>? = null
     abstract fun process(variables: Map<String, Boolean>): Boolean
 }
 
@@ -86,56 +86,79 @@ object Parser {
                                                     /  \              /        \
                                                    P   AND          AND        AND
                                                       /   \        /   \      /   \
-                                                     Q     R      S     T    U     V
+                                                     Q     R     S      T   U      V
         3.
      */
-    fun <T> buildTree(expr: String, variables: Map<String, Boolean>) : Node<T> {
+    fun buildTree(expr: String, variables: Map<String, Boolean>) : Node<*> {
 
+        // (()  ())
         // Grabs the index range within the first found parenthesis body.
-        fun grabSection(expr: String) : IntRange {
+        fun grabSection(expr: String): List<IntRange> {
+            val mutableList: MutableList<IntRange> = mutableListOf()
+            var startIndex = -1
             var counter = 0
-            val start = expr.indexOfFirst { it == '(' }.coerceAtLeast(0)
-            for (i in start+1..< expr.length) {
-                if (expr[i] == '(') counter++
-                else if (expr[i] == ')') {
-                    counter --
-                    if (counter == 0) return start+1..<i
+
+            expr.forEachIndexed { index, char ->
+                when (char) {
+                    '(' -> {
+                        if (startIndex == -1) startIndex = index + 1
+                        counter++
+                    }
+                    ')' -> {
+                        counter--
+                        if (counter == 0 && startIndex != -1) {
+                            mutableList.add(startIndex..< index)
+                            startIndex = -1
+                        }
+                    }
                 }
             }
-            return start..<expr.length
+            println(mutableList)
+            return mutableList
         }
+
+        var mutable = expr
+        grabSection(expr).reversed().forEach { mutable = mutable.removeRange(it) }
+        println(mutable)
+
+        val op = Operand("alpha")
+        return op
+
+
+
+
 
         // Takes a base expression (no nested parenthesis) and builds its node tree.
-        fun <T> orderOfOp(expr: String) : Node<T> {
-            val orderOfOperations : List<List<Char>> = listOf(
-                listOf(OperatorType.NOT.char),
-                listOf(OperatorType.AND.char),
-                listOf(OperatorType.OR.char, OperatorType.XOR.char, OperatorType.IMPLY.char),
-                listOf(OperatorType.EQUALS.char, OperatorType.NEQUALS.char)
-            )
-
-
-        }
+//        fun <T> orderOfOp(expr: String) : Node<T> {
+//            val orderOfOperations : List<List<Char>> = listOf(
+//                listOf(OperatorType.NOT.char),
+//                listOf(OperatorType.AND.char),
+//                listOf(OperatorType.OR.char, OperatorType.XOR.char, OperatorType.IMPLY.char),
+//                listOf(OperatorType.EQUALS.char, OperatorType.NEQUALS.char)
+//            )
+//
+//
+//        }
 
         /*
             throw an exception if the parenthesis is empty,
             begin building the tree if there are no parenthesis present,
             or recurse this function if there are.
         */
-        val section = grabSection(expr)
-        if (section.isEmpty()) throw ParseException("Empty parenthesis body found.")
-        else if (section == 1..<expr.length) {
-            return orderOfOp(expr.substring(section))
-        } else {
-            val children : MutableList<String> = mutableListOf()
-            var mutable = expr
-            do {
-                var s = grabSection(mutable)
-                children.add(mutable.substring(s))
-                mutable.removeRange(s)
-            } while (grabSection(mutable) != 1..<mutable.length)
-            children.forEach {  }
-        }
+//        val section = grabSection(expr)
+//        if (section.isEmpty()) throw ParseException("Empty parenthesis body found.")
+//        else if (section == 1..<expr.length) {
+//            return orderOfOp(expr.substring(section))
+//        } else {
+//            val children : MutableList<String> = mutableListOf()
+//            var mutable = expr
+//            do {
+//                var s = grabSection(mutable)
+//                children.add(mutable.substring(s))
+//                mutable.removeRange(s)
+//            } while (grabSection(mutable) != 1..<mutable.length)
+//            children.forEach {  }
+//        }
 
         // figure out how to make the recursion fit in with the bv
 
@@ -147,11 +170,12 @@ enum class OperatorType(val char: Char) { AND('∧'), OR('∨'), NOT('¬'), XOR(
 class ParseException(message: String) : Exception(message)
 
 fun main() {
-    val expression = "alpha AND beta OR charlie"
+    val expression = "(alpha AND beta) OR (charlie)"
     val converted = Parser.convert(expression)
     val variables = Parser.identifyVariables(converted)
     println("original: $expression")
     println("converted: $converted")
     println("variables: $variables")
     Parser.validateExpression(converted, Parser.convert(expression, true), variables)
+    println(Parser.buildTree(converted, mapOf()))
 }
