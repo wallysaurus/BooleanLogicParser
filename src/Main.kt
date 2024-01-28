@@ -26,43 +26,12 @@ class Operand(variable: String) : Node<String>(variable) {
 
 object Parser {
 
-    fun convert(expr: String, whitespace: Boolean = false) : String {
-        return OperatorType.entries.fold(expr) { alias, operator -> alias.replace(operator.toString(), operator.char.toString()) }
-            .replace("!=", OperatorType.NEQUALS.char.toString())
-            .replace(" ", if (whitespace) " " else "" )
-    }
+    fun grabVariables(expr: String, operators: List<OperatorType> = OperatorType.entries) : List<String> =
+        Regex("[^()${operators.joinToString("") { it.char.toString() }}]+").findAll(expr).map { it.value }.toList().distinct()
 
-    // this doesn't check the 7-bit ascii table or wtv, but honestly, who has time for that
-    fun identifyVariables(expr: String) : List<String> {
-        return Regex("[^()${OperatorType.entries.joinToString("") { it.char.toString() }}]+")
-            .findAll(expr).map { it.value }.toList()
-    }
-
-    /*
-    Error cases to be validated:
-      1. Two variables seperated by whitespace ["alpha beta OR charlie"]
-      2. Two variables seperated by NOT (can't be a standalone operator) ["alpha ¬beta"]
-      3. Parenthesis abuse:
-         - Expression contains backwards facing parenthesis ["(alpha AND beta))("]
-         - Expression contains unequal amount of each parenthesis ["((alpha AND beta)"]
-         - Expression contains empty parenthesis ["(alpha AND beta)()"]
-         - Incomplete expression within parenthesis ["alpha (AND beta)"]
-         3 and 4 will be checked later.
-    */
-    fun validateExpression(converted: String, wsConverted: String, variables: List<String>) {
-        // Two variables seperated by whitespace:
-        val wsVariables = Regex("[^() ${OperatorType.entries.joinToString("") { it.char.toString() }}]+")
-            .findAll(wsConverted).map { it.value }.toList()
-        if (wsVariables != variables) throw ParseException("All variables must be seperated by an operator.")
-
-        // Two variables seperated by NOT:
-        val notVariables = Regex("[^() ${OperatorType.entries.filter{it!=OperatorType.NOT}.joinToString("") { it.char.toString() }}]+")
-            .findAll(wsConverted).map { it.value }.toList()
-        if (variables != notVariables) throw ParseException("The NOT operator does not function as a standalone operator.")
-
-        // Parenthesis abuse:
+    fun validateExpression(translated: String) {
         var counter = 0
-        converted.forEach {
+        translated.forEach {
             if (it == '(') counter++
             else if (it == ')') {
                 counter--
@@ -72,27 +41,9 @@ object Parser {
         if (counter != 0) throw ParseException("Parenthesis Abuse.")
     }
 
+    fun buildTree(expr: String) : Node<*> {
 
-    /*
-    Steps to build a tree:
-        1. Identify the lowest scope. In the following test case: ["(P OR (Q AND R)) AND ((S AND T) OR (U OR V))"],
-           our lowest scope can be defined as ["a AND b"], where a and b are parenthesis bodies that should be
-           recursed back into the function.
-        2. Create the first node of your tree by identifying the first least-prioritized-operator in the scope.
-           For our test case, this would be the AND operator. An example tree demonstrating the order of operations:
-                                                               AND
-                                                       /                 \
-                                                     OR                   OR
-                                                    /  \              /        \
-                                                   P   AND          AND        AND
-                                                      /   \        /   \      /   \
-                                                     Q     R     S      T   U      V
-        3.
-     */
-    fun buildTree(expr: String, variables: Map<String, Boolean>) : Node<*> {
-
-        // (()  ())
-        // Grabs the index range within the first found parenthesis body.
+        // Grabs the range of content within the lowest-scoped parenthesis bodies.
         fun grabSection(expr: String): List<IntRange> {
             val mutableList: MutableList<IntRange> = mutableListOf()
             var startIndex = -1
@@ -113,54 +64,49 @@ object Parser {
                     }
                 }
             }
-            println(mutableList)
             return mutableList
         }
 
-        var mutable = expr
-        grabSection(expr).reversed().forEach { mutable = mutable.removeRange(it) }
-        println(mutable)
+        // Yank out all nested parenthesis.
+        val sections = grabSection(expr).map { expr.substring(it) }.toList()
+        var lowestScope = expr
+        sections.forEach { lowestScope = lowestScope.replace(it, "") }
 
-        val op = Operand("alpha")
-        return op
+        // Find the first operator present in order of operations.
+        var operatorIndex = -1
+        listOf('≠', '=', '→', '⊕', '∨', '∧', '¬').forEach { operator ->
+            if (operatorIndex == -1) operatorIndex = lowestScope.indexOfFirst { it == operator }
+        }
 
+        lateinit var node : Node<*>
 
+        // Check if the scope holds an Operand or an Operator.
+        if (operatorIndex == -1) {
+            if (grabVariables(lowestScope).size != 1) throw ParseException("Two variables cannot be placed simultaneously without a separating operator [${lowestScope}]")
+            else {
+                node = Operand(lowestScope)
+            }
+        } else {
+            node = Operator(
+                OperatorType.entries.find { lowestScope[operatorIndex] == it.char }
+                    ?: throw ParseException("Was unable to associate an operator character with its enum: [${lowestScope[operatorIndex]}]")
+            )
 
+            val rawOperatorIndex = expr.indexOfFirst { it == lowestScope[operatorIndex] }
 
+            // Check to make sure the expression isn't incomplete, i.e. [charlie AND] or [OR charlie]
+            if (lowestScope.getOrNull(operatorIndex-1) == null || lowestScope.getOrNull(operatorIndex+1) == null) {
+                // The NOT operator is the only exception to the above rule, provided that the operator precedes the expression.
+                if (lowestScope[operatorIndex] == OperatorType.NOT.char && lowestScope.getOrNull(operatorIndex-1) == null) {
+                    node.left = buildTree(expr.substring(0..< rawOperatorIndex))
+                } else throw ParseException("Incomplete expression [${lowestScope}]")
+            } else {
+                node.left = buildTree(expr.substring(0..< rawOperatorIndex))
+                node.right = buildTree(expr.substring(rawOperatorIndex+1 ..< expr.length))
+            }
+        }
 
-        // Takes a base expression (no nested parenthesis) and builds its node tree.
-//        fun <T> orderOfOp(expr: String) : Node<T> {
-//            val orderOfOperations : List<List<Char>> = listOf(
-//                listOf(OperatorType.NOT.char),
-//                listOf(OperatorType.AND.char),
-//                listOf(OperatorType.OR.char, OperatorType.XOR.char, OperatorType.IMPLY.char),
-//                listOf(OperatorType.EQUALS.char, OperatorType.NEQUALS.char)
-//            )
-//
-//
-//        }
-
-        /*
-            throw an exception if the parenthesis is empty,
-            begin building the tree if there are no parenthesis present,
-            or recurse this function if there are.
-        */
-//        val section = grabSection(expr)
-//        if (section.isEmpty()) throw ParseException("Empty parenthesis body found.")
-//        else if (section == 1..<expr.length) {
-//            return orderOfOp(expr.substring(section))
-//        } else {
-//            val children : MutableList<String> = mutableListOf()
-//            var mutable = expr
-//            do {
-//                var s = grabSection(mutable)
-//                children.add(mutable.substring(s))
-//                mutable.removeRange(s)
-//            } while (grabSection(mutable) != 1..<mutable.length)
-//            children.forEach {  }
-//        }
-
-        // figure out how to make the recursion fit in with the bv
+        return node
 
     }
 
@@ -170,12 +116,26 @@ enum class OperatorType(val char: Char) { AND('∧'), OR('∨'), NOT('¬'), XOR(
 class ParseException(message: String) : Exception(message)
 
 fun main() {
-    val expression = "(alpha AND beta) OR (charlie)"
-    val converted = Parser.convert(expression)
-    val variables = Parser.identifyVariables(converted)
+    val expression = "((P OR (Q AND R)) AND NOT((S AND T) OR (U OR V)))"
+    val translated = OperatorType.entries.fold(expression) { alias, operator -> alias.replace(operator.toString(), operator.char.toString()) }
+        .replace("!=", OperatorType.NEQUALS.char.toString())
+        .replace(" ", "")
+    val variables = Parser.grabVariables(translated)
+
+    Parser.validateExpression(expression)
+
     println("original: $expression")
-    println("converted: $converted")
+    println("translated: $translated")
     println("variables: $variables")
-    Parser.validateExpression(converted, Parser.convert(expression, true), variables)
-    println(Parser.buildTree(converted, mapOf()))
+    println(Parser.buildTree(translated).process(
+        mapOf(
+            "P" to true,
+            "Q" to false,
+            "R" to true,
+            "S" to true,
+            "T" to false,
+            "U" to true,
+            "V" to true
+        )
+    ))
 }
