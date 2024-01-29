@@ -29,7 +29,7 @@ object Parser {
     fun grabVariables(expr: String, operators: List<OperatorType> = OperatorType.entries) : List<String> =
         Regex("[^()${operators.joinToString("") { it.char.toString() }}]+").findAll(expr).map { it.value }.toList().distinct()
 
-    fun validateExpression(translated: String) {
+    fun validateExpression(translated: String) : Boolean {
         var counter = 0
         translated.forEach {
             if (it == '(') counter++
@@ -39,9 +39,11 @@ object Parser {
             }
         }
         if (counter != 0) throw ParseException("Parenthesis Abuse.")
+        return true
     }
 
     fun buildTree(expr: String) : Node<*> {
+        println("Attempting to parse: $expr")
 
         // Grabs the range of content within the lowest-scoped parenthesis bodies.
         fun grabSection(expr: String): List<IntRange> {
@@ -70,7 +72,7 @@ object Parser {
         // Yank out all nested parenthesis.
         val sections = grabSection(expr).map { expr.substring(it) }.toList()
         var lowestScope = expr
-        sections.forEach { lowestScope = lowestScope.replace(it, "") }
+        sections.forEach { lowestScope = lowestScope.replace("($it)", "") }
 
         // Find the first operator present in order of operations.
         var operatorIndex = -1
@@ -81,11 +83,9 @@ object Parser {
         lateinit var node : Node<*>
 
         // Check if the scope holds an Operand or an Operator.
-        if (operatorIndex == -1) {
-            if (grabVariables(lowestScope).size != 1) throw ParseException("Two variables cannot be placed simultaneously without a separating operator [${lowestScope}]")
-            else {
-                node = Operand(lowestScope)
-            }
+        if (operatorIndex != -1) {
+            if (grabVariables(lowestScope).size != 1) throw ParseException("Two variables cannot be placed simultaneously without a separating operator [$lowestScope]")
+            else node = Operand(lowestScope)
         } else {
             node = Operator(
                 OperatorType.entries.find { lowestScope[operatorIndex] == it.char }
